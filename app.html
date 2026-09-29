@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RunMath - calculator</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #101512; color: #eef5ef; margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+  main { max-width: 760px; padding: 32px 20px 48px; width: 100%; box-sizing: border-box; }
+  h1 { font-size: 1.9rem; margin: 0 0 4px; }
+  p.sub { color: #c4d8c9; margin: 0 0 20px; }
+  .card { background: #16201a; border: 1px solid #28402f; border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 1.05rem; color: #d9ecdf; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; }
+  label { display: block; color: #a9c2b0; font-size: 0.82rem; margin-bottom: 4px; }
+  input, select { width: 100%; box-sizing: border-box; background: #101512; border: 1px solid #33523e; color: #eef5ef; border-radius: 8px; padding: 9px 10px; font-size: 0.95rem; }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .presets button { background: #1d2b22; color: #dff0e5; border: 1px solid #33523e; border-radius: 999px; padding: 7px 14px; font-size: 0.85rem; cursor: pointer; }
+  .presets button:hover { background: #28402f; }
+  .out { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .metric { background: #101512; border: 1px solid #28402f; border-radius: 10px; padding: 12px 14px; }
+  .metric .v { font-size: 1.3rem; font-weight: 700; color: #6fdc9a; }
+  .metric .k { color: #a9c2b0; font-size: 0.78rem; margin-top: 2px; }
+  .note { color: #88a491; font-size: 0.82rem; line-height: 1.5; margin-top: 10px; }
+  .eq { font-family: ui-monospace, monospace; font-size: 0.85rem; color: #6fdc9a; margin-top: 10px; line-height: 1.7; }
+  a.back { color: #6fdc9a; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>&#127939; RunMath</h1>
+  <p class="sub">One real result in; the whole season out.</p>
+  <div class="presets">
+    <button data-p="fifty">50:00 10K</button>
+    <button data-p="fourhour">Sub-4 attempt</button>
+    <button data-p="parkrun">25:00 parkrun</button>
+    <button data-p="mile">6:00 mile</button>
+  </div>
+  <div class="card">
+    <h2>1. The result you have</h2>
+    <div class="grid">
+      <div><label>Time (h:mm:ss or mm:ss)</label><input id="time" type="text" value="50:00" style="font-family:ui-monospace,monospace"></div>
+      <div><label>Distance (km)</label><input id="dist" type="number" value="10" step="any" min="0.1"></div>
+    </div>
+    <div class="out" style="margin-top:12px">
+      <div class="metric"><div class="v" id="o-pacekm">-</div><div class="k">Pace per km</div></div>
+      <div class="metric"><div class="v" id="o-pacemi">-</div><div class="k">Pace per mile</div></div>
+      <div class="metric"><div class="v" id="o-speed">-</div><div class="k">Speed</div></div>
+      <div class="metric"><div class="v" id="o-band">-</div><div class="k">Honest band</div></div>
+    </div>
+    <div class="eq" id="o-eq"></div>
+  </div>
+  <div class="card">
+    <h2>2. The race you want</h2>
+    <div class="grid">
+      <div><label>Target distance (km)</label><input id="target" type="number" value="21.0975" step="any" min="0.1"></div>
+      <div><label>Split style</label><select id="mode">
+        <option value="even">Even splits</option>
+        <option value="negative" selected>Negative split</option>
+        <option value="positive">Positive split</option>
+      </select></div>
+      <div><label>By how much (%)</label><input id="pct" type="number" value="2" step="0.5" min="0" max="10"></div>
+    </div>
+    <div class="out" style="margin-top:12px">
+      <div class="metric"><div class="v" id="o-pred">-</div><div class="k">Predicted finish (Riegel)</div></div>
+      <div class="metric"><div class="v" id="o-tpace">-</div><div class="k">Required pace per km</div></div>
+      <div class="metric"><div class="v" id="o-halves">-</div><div class="k">Half-way split plan</div></div>
+    </div>
+    <div class="eq" id="o-plan"></div>
+  </div>
+  <p class="note">The Riegel formula assumes your endurance training matches the longer distance. It predicts what your fitness says, not what your preparation will allow - most marathon misses are a training gap, not a math error.</p>
+  <p><a class="back" href="index.html">&larr; Back to RunMath</a></p>
+</main>
+<script src="engine.js"></script>
+<script>
+(function () {
+  var ids = ['time','dist','target','mode','pct'];
+  function num(id) { var v = parseFloat(document.getElementById(id).value); return isFinite(v) ? v : 0; }
+  function txt(id) { return document.getElementById(id).value; }
+  function compute() {
+    if (typeof RunMath === 'undefined') return;
+    var t = RunMath.parseTime(txt('time'));
+    var d = num('dist');
+    if (!t || !(d > 0)) {
+      ['o-pacekm','o-pacemi','o-speed','o-band','o-pred','o-tpace','o-halves'].forEach(function(id){
+        document.getElementById(id).textContent = '-';
+      });
+      document.getElementById('o-eq').textContent = '';
+      document.getElementById('o-plan').textContent = '';
+      return;
+    }
+    var pkm = RunMath.paceSecPerKm(t, d);
+    document.getElementById('o-pacekm').textContent = RunMath.fmtTime(pkm) + ' /km';
+    document.getElementById('o-pacemi').textContent = RunMath.fmtTime(RunMath.paceSecPerMile(t, d)) + ' /mi';
+    document.getElementById('o-speed').textContent = RunMath.speedKmh(t, d).toFixed(1) + ' km/h';
+    document.getElementById('o-band').textContent = RunMath.paceBand(pkm);
+    document.getElementById('o-eq').innerHTML = RunMath.equivalents(t, d).map(function (e) {
+      return e.label + ': ' + RunMath.fmtTime(e.time);
+    }).join('<br>');
+
+    var target = num('target');
+    if (target > 0) {
+      var pred = RunMath.riegel(t, d, target);
+      document.getElementById('o-pred').textContent = RunMath.fmtTime(pred);
+      document.getElementById('o-tpace').textContent = RunMath.fmtTime(RunMath.paceSecPerKm(pred, target)) + ' /km';
+      var plan = RunMath.splitPlan(pred, target, txt('mode'), num('pct'));
+      document.getElementById('o-halves').textContent = RunMath.fmtTime(plan.firstHalf) + ' then ' + RunMath.fmtTime(plan.secondHalf);
+      var kmMarks = plan.perKm.map(function (p, i) {
+        var mark = (i + 1 <= Math.floor(target)) ? (i + 1) : target.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+        return mark + 'km @ ' + RunMath.fmtTime(p);
+      });
+      document.getElementById('o-plan').textContent = kmMarks.join('  |  ');
+    } else {
+      ['o-pred','o-tpace','o-halves'].forEach(function(id){ document.getElementById(id).textContent = '-'; });
+      document.getElementById('o-plan').textContent = '';
+    }
+  }
+  var presets = {
+    fifty:   {time:'50:00', dist:10, target:21.0975, mode:'negative', pct:2},
+    fourhour:{time:'55:00', dist:10, target:42.195, mode:'even', pct:0},
+    parkrun: {time:'25:00', dist:5, target:10, mode:'negative', pct:2},
+    mile:    {time:'6:00', dist:1.609344, target:1.5, mode:'even', pct:0}
+  };
+  Array.prototype.forEach.call(document.querySelectorAll('.presets button'), function (b) {
+    b.addEventListener('click', function () {
+      var p = presets[b.getAttribute('data-p')];
+      if (!p) return;
+      Object.keys(p).forEach(function (k) { document.getElementById(k).value = p[k]; });
+      compute();
+    });
+  });
+  ids.forEach(function (id) {
+    document.getElementById(id).addEventListener('input', compute);
+    document.getElementById(id).addEventListener('change', compute);
+  });
+  compute();
+})();
+</script>
+</body>
+</html>
